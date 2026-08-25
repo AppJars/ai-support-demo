@@ -1,0 +1,48 @@
+name: ai-support-demo
+
+services:
+  # Ollama service
+  ollama:
+    ports:
+      - "11434:11434"
+    pull_policy: always
+    tty: true
+    image: ollama/ollama:0.20.7
+    # Keeps the pulled model across restarts; without it every recreate re-downloads it.
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # This service pulls the llama3.2:3b model from Ollama and then stops
+  ollama-init:
+    image: ollama/ollama:0.20.7
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: ["ollama", "run", "llama3.2:3b"]
+    restart: "no"
+
+  # Vectorial database service
+  vectorial_db:
+    image: pgvector/pgvector:pg18-trixie
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=aisupport
+      - POSTGRES_USER=aisupport
+      - POSTGRES_PASSWORD=aisupport
+    volumes:
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      # PostgreSQL 18 images keep PGDATA under /var/lib/postgresql/18, so the volume goes one level up.
+      - postgres_data:/var/lib/postgresql
+
+volumes:
+  ollama_models:
+  postgres_data:

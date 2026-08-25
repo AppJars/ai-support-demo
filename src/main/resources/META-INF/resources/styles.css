@@ -1,0 +1,117 @@
+@import url('main-layout.css');
+
+/* Login page — one card per demo account, equal height with the button pinned to the bottom */
+.login-view {
+  text-align: center;
+}
+
+.login-title {
+  margin-bottom: var(--lumo-space-s);
+}
+
+.login-intro {
+  color: var(--lumo-secondary-text-color);
+  max-width: 40rem;
+  margin: 0 auto var(--lumo-space-l);
+}
+
+.login-card-row {
+  display: flex;
+  gap: var(--lumo-space-l);
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+}
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-s);
+  flex: 1 1 16rem;
+  max-width: 18rem;
+  text-align: start;
+  padding: var(--lumo-space-m);
+  background-color: var(--lumo-base-color);
+  border: 1px solid var(--lumo-contrast-10pct);
+  border-radius: var(--lumo-border-radius-l);
+  box-shadow: var(--lumo-box-shadow-xs);
+}
+
+.login-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-s);
+  font-size: var(--lumo-font-size-l);
+  font-weight: 600;
+}
+
+.login-card-badge {
+  margin-inline-start: auto;
+}
+
+.login-card-desc {
+  margin: 0;
+  color: var(--lumo-secondary-text-color);
+}
+
+/* Pin the login button to the bottom so it aligns across cards of different heights */
+.login-card vaadin-button {
+  margin-top: auto;
+}
+
+/* Landing page (HomeView) */
+.home-view {
+  margin: 0 auto;
+  max-width: 60rem;
+  padding: var(--lumo-space-l);
+}
+
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lumo-space-s);
+  text-align: center;
+  padding-bottom: var(--lumo-space-m);
+}
+
+.home-hero .home-tagline {
+  color: var(--lumo-secondary-text-color);
+  font-size: var(--lumo-font-size-l);
+  max-width: 44rem;
+  margin: 0;
+}
+
+.home-section {
+  padding-top: var(--lumo-space-m);
+}
+
+.home-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--lumo-space-m);
+}
+
+.home-feature-icon {
+  color: var(--lumo-primary-color);
+}
+
+.home-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-s);
+  flex-wrap: wrap;
+  padding-top: var(--lumo-space-m);
+}
+
+.home-actions vaadin-menu-bar vaadin-menu-bar-button > div {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-xs);
+}
+
+.home-links {
+  display: flex;
+  gap: var(--lumo-space-l);
+  flex-wrap: wrap;
+}

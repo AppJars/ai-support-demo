@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.appjars</groupId>
+    <artifactId>appjars-ai-support-demo</artifactId>
+    <name>AI Support - Demo</name>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <java.version>21</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+		<maven.compiler.release>21</maven.compiler.release>
+        <appjars.ai-support.version>2.0.0</appjars.ai-support.version>
+        <vaadin.version>25.2.3</vaadin.version>
+        <error-window-vaadin.version>4.2.0</error-window-vaadin.version>
+        <antler-tour.version>1.1.0</antler-tour.version>
+        <spring.boot.version>4.1.0</spring.boot.version>
+        <spring.core.version>7.0.8</spring.core.version>
+    </properties>
+
+    <repositories>
+
+        <!-- Main Maven repository -->
+        <repository>
+            <id>central</id>
+            <url>https://repo.maven.apache.org/maven2</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+
+        <!-- Repository used by many Vaadin add-ons -->
+        <repository>
+            <id>Vaadin Directory</id>
+            <url>https://maven.vaadin.com/vaadin-addons</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+
+        <!-- Repository publishing the AppJars artifacts -->
+        <repository>
+            <id>appjars</id>
+            <url>https://maven.appjars.com</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+
+    </repositories>
+
+    <dependencyManagement>
+        <dependencies>
+
+            <dependency>
+                <groupId>com.vaadin</groupId>
+                <artifactId>vaadin-bom</artifactId>
+                <version>${vaadin.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring.boot.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-logging</artifactId>
+                    </exclusion>
+                </exclusions>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+
+        <dependency>
+            <groupId>com.vaadin</groupId>
+            <artifactId>vaadin-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- Vaadin 25 moved dev-mode tooling into a separate artifact; required for `spring-boot:run` in dev mode. -->
+        <dependency>
+            <groupId>com.vaadin</groupId>
+            <artifactId>vaadin-dev</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- AI Support dependencies-->
+
+        <!-- Model layer: the DTOs and enums the demo uses directly. -->
+        <dependency>
+            <groupId>com.appjars</groupId>
+            <artifactId>appjars-ai-support-model</artifactId>
+            <version>${appjars.ai-support.version}</version>
+        </dependency>
+
+        <!-- Data layer: compile against the interfaces, pull the implementation in at runtime only. -->
+        <dependency>
+            <groupId>com.appjars</groupId>
+            <artifactId>appjars-ai-support-data</artifactId>
+            <version>${appjars.ai-support.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.appjars</groupId>
+            <artifactId>appjars-ai-support-data-impl</artifactId>
+            <version>${appjars.ai-support.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Business layer: compile against the interfaces, pull the implementation in at runtime only. -->
+        <dependency>
+            <groupId>com.appjars</groupId>
+            <artifactId>appjars-ai-support-business</artifactId>
+            <version>${appjars.ai-support.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.appjars</groupId>
+            <artifactId>appjars-ai-support-business-impl</artifactId>
+            <version>${appjars.ai-support.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Flow layer -->
+        <dependency>
+            <groupId>com.appjars</groupId>
+            <artifactId>appjars-ai-support-flow</artifactId>
+            <version>${appjars.ai-support.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<scope>provided</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>
+				org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+
+        <dependency>
+            <groupId>com.flowingcode.vaadin.addons</groupId>
+            <artifactId>error-window-vaadin</artifactId>
+            <version>${error-window-vaadin.version}</version>
+        </dependency>
+
+        <!-- Guided tour -->
+        <dependency>
+            <groupId>org.vaadin.addons.antlerflow</groupId>
+            <artifactId>antler-tour</artifactId>
+            <version>${antler-tour.version}</version>
+        </dependency>
+
+	</dependencies>
+
+    <build>
+        <defaultGoal>spring-boot:run</defaultGoal>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <!-- Pinned: the imported BOM manages dependencies, not plugins, so an unpinned
+                     version resolves to whatever is latest, milestones included. -->
+                <version>${spring.boot.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <!-- Clean build and startup time for Vaadin apps sometimes may
+                exceed
+                     the default Spring Boot's 30sec timeout.  -->
+                <configuration>
+                    <wait>500</wait>
+                    <maxAttempts>240</maxAttempts>
+                </configuration>
+            </plugin>
+
+            <!--
+                Take care of synchronizing java dependencies and imports in
+                package.json and main.js files.
+                It also creates webpack.config.js if not exists yet.
+            -->
+            <plugin>
+                <groupId>com.vaadin</groupId>
+                <artifactId>vaadin-maven-plugin</artifactId>
+                <version>${vaadin.version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.springframework</groupId>
+                        <artifactId>spring-context</artifactId>
+                        <version>${spring.core.version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-frontend</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <!-- Production mode is activated using -Pproduction -->
+            <id>production</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.vaadin</groupId>
+                        <artifactId>vaadin-maven-plugin</artifactId>
+                        <version>${vaadin.version}</version>
+						<dependencies>
+                            <dependency>
+                                <groupId>org.springframework</groupId>
+                                <artifactId>spring-context</artifactId>
+                                <version>${spring.core.version}</version>
+                            </dependency>
+						</dependencies>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>build-frontend</goal>
+                                </goals>
+                                <phase>compile</phase>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <productionMode>true</productionMode>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+    </profiles>
+
+</project>
