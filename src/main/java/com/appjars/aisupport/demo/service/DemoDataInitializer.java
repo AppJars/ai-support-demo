@@ -30,8 +30,10 @@ import com.appjars.aisupport.model.CategoryDto;
 import com.appjars.aisupport.model.DocumentDto;
 import com.appjars.aisupport.model.LlmDto;
 import com.appjars.aisupport.model.PromptDto;
+import com.appjars.aisupport.model.ToolAssignmentDto;
 import com.appjars.aisupport.model.filters.AssistantFilter;
 import com.appjars.aisupport.model.filters.DocumentFilter;
+import com.appjars.aisupport.demo.tools.ZephyrOneSupportTools;
 import com.appjars.service.HasLogger;
 
 import java.io.File;
@@ -58,7 +60,8 @@ import org.springframework.stereotype.Component;
  * <li>two knowledge-base <b>categories</b>, each with its own fictional <b>document</b>;</li>
  * <li>three <b>assistants</b>: a General Assistant (plain chat) and two document-grounded support
  * assistants — one customer-facing, one internal — bound to different categories so their
- * answers differ.</li>
+ * answers differ; the customer-facing one is also assigned {@link ZephyrOneSupportTools}, so it
+ * can check warranty status and place replacement part orders.</li>
  * </ul>
  * Once the catalog exists, {@link DemoConversationSeeder} adds a couple of pre-built conversations
  * and a matching LLM Inspector exchange. Every entity is created only if missing, so restarts are
@@ -144,6 +147,11 @@ public class DemoDataInitializer implements HasLogger {
     private static final String CUSTOMER_ASSISTANT_NAME = "Support Assistant";
     private static final String INTERNAL_ASSISTANT_NAME = "Support Assistant (Internal)";
 
+    // Tools ----------------------------------------------------------------------------------------
+    // Spring bean name (default: decapitalized class name) of ZephyrOneSupportTools, assigned to the
+    // customer Support Assistant so it can check warranty status and place replacement part orders.
+    private static final String ZEPHYR_ONE_TOOLS_BEAN_NAME = "zephyrOneSupportTools";
+
     private final DocumentService documentService;
     private final CategoryService categoryService;
     private final LlmService llmService;
@@ -177,7 +185,8 @@ public class DemoDataInitializer implements HasLogger {
         AssistantDto general =
             getOrCreateAssistant(GENERAL_ASSISTANT_NAME, true, llm, generalPrompt, List.of());
         AssistantDto customerSupport = getOrCreateAssistant(CUSTOMER_ASSISTANT_NAME, false, llm,
-            customerPrompt, List.of(customerCategory));
+            customerPrompt, List.of(customerCategory),
+            List.of(ToolAssignmentDto.ofBean(ZEPHYR_ONE_TOOLS_BEAN_NAME)));
         getOrCreateAssistant(INTERNAL_ASSISTANT_NAME, false, llm, internalPrompt,
             List.of(internalCategory));
 
@@ -261,6 +270,11 @@ public class DemoDataInitializer implements HasLogger {
 
     private AssistantDto getOrCreateAssistant(String name, boolean defaultAssistant, LlmDto llm,
         PromptDto prompt, List<CategoryDto> categories) {
+        return getOrCreateAssistant(name, defaultAssistant, llm, prompt, categories, List.of());
+    }
+
+    private AssistantDto getOrCreateAssistant(String name, boolean defaultAssistant, LlmDto llm,
+        PromptDto prompt, List<CategoryDto> categories, List<ToolAssignmentDto> toolAssignments) {
         return assistantService.findByFilter(AssistantFilter.builder().name(name).build())
             .stream().findFirst()
             .orElseGet(() -> {
@@ -271,6 +285,7 @@ public class DemoDataInitializer implements HasLogger {
                     .llm(llm)
                     .prompt(prompt)
                     .categories(new ArrayList<>(categories))
+                    .toolAssignments(new ArrayList<>(toolAssignments))
                     .build();
                 assistant.setId(assistantService.save(assistant));
                 logger().info("Created assistant '{}'.", name);

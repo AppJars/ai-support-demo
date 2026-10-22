@@ -143,6 +143,14 @@
             <version>${appjars.ai-support.version}</version>
             <scope>runtime</scope>
         </dependency>
+        <!-- Only the @Tool/@P annotations, to declare the demo's own tool bean; already on the
+             runtime classpath via appjars-ai-support-business-impl above. -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-core</artifactId>
+            <version>${langchain4j-core.version}</version>
+            <scope>provided</scope>
+        </dependency>
 
         <!-- Flow layer -->
         <dependency>

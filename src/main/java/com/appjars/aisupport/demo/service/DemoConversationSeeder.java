@@ -28,6 +28,7 @@ import com.appjars.aisupport.common.ContentStoreType;
 import com.appjars.aisupport.common.ContentType;
 import com.appjars.aisupport.common.SessionStatus;
 import com.appjars.aisupport.common.SessionType;
+import com.appjars.aisupport.demo.tools.ZephyrOneSupportTools;
 import com.appjars.aisupport.model.AssistantDto;
 import com.appjars.aisupport.model.LlmExchangeDto;
 import com.appjars.aisupport.model.MessageAttachmentDto;
@@ -37,6 +38,8 @@ import com.appjars.aisupport.model.PromptDto;
 import com.appjars.aisupport.model.SenderType;
 import com.appjars.aisupport.model.SessionDto;
 import com.appjars.aisupport.model.util.EmbeddingChunk;
+import com.appjars.aisupport.model.util.OfferedTool;
+import com.appjars.aisupport.model.util.ToolCall;
 import com.appjars.service.HasLogger;
 import java.io.IOException;
 import java.io.InputStream;
@@ -79,6 +82,13 @@ public class DemoConversationSeeder implements HasLogger {
     private static final String CUSTOMER = "Leo";
     private static final String ADMIN = "Olivia";
     private static final String GENERAL_CUSTOMER = "Sophia";
+    private static final String TOOL_CUSTOMER = "Maya";
+
+    // Showcases tool calling: the Support Assistant resolves the request on its own, via
+    // ZephyrOneSupportTools, with no human admin involved.
+    private static final String COVERED_SERIAL = "ZO-88421-07";
+    private static final String REPLACEMENT_PART_CODE = "BK-14";
+    private static final String REPLACEMENT_ORDER_ID = "ORD-65790";
 
     // Showcases CSV attachments (2.2.0): the content is read as text, no file ever touches disk.
     private static final String DIAGNOSTICS_LOG_RESOURCE = "documents/zephyr-one-e27-log.csv";
@@ -103,6 +113,7 @@ public class DemoConversationSeeder implements HasLogger {
         }
         seedSupportConversation(customerSupportAssistant);
         seedGeneralConversation(generalAssistant);
+        seedToolConversation(customerSupportAssistant);
         logger().info("Seeded demo conversations.");
     }
 
@@ -178,6 +189,38 @@ public class DemoConversationSeeder implements HasLogger {
                 Want me to adjust the tone or the dates?""")
                 .processed(true).build());
         linkExchange(question, answer, generalExchange(session, answer, assistant));
+    }
+
+    /**
+     * A conversation the Support Assistant resolves entirely on its own by calling
+     * {@link com.appjars.aisupport.demo.tools.ZephyrOneSupportTools}: no human admin steps in. The
+     * matching {@link LlmExchangeDto} carries the offered tool definitions and the calls the model
+     * made, so the Inspector shows tool usage distinct from the RAG and plain exchanges above.
+     */
+    private void seedToolConversation(AssistantDto assistant) {
+        Instant start = Instant.now().minus(Duration.ofMinutes(30)).truncatedTo(ChronoUnit.MILLIS);
+
+        SessionDto session = createSession(TOOL_CUSTOMER,
+            "Warranty check and replacement blade kit for " + COVERED_SERIAL, assistant);
+        participantService.saveAll(List.of(
+            participant(session, TOOL_CUSTOMER, false, false, start.minusSeconds(60)),
+            participant(session, assistant.getName(), true, true, start.minusSeconds(60))));
+
+        MessageDto question = save(message(session, TOOL_CUSTOMER, SenderType.USER, start,
+            "My Zephyr One's serial number is " + COVERED_SERIAL
+                + ". Is it still under warranty, and can you send me a replacement blade kit ("
+                + REPLACEMENT_PART_CODE + ")?")
+                .processed(true).build());
+
+        MessageDto answer = save(message(session, assistant.getName(), SenderType.AUTOMATIC,
+            start.plusSeconds(6),
+            """
+                Good news — serial %s is covered under warranty until **2027-03-14**. I've placed an \
+                order for replacement blade kit %s (order **%s**); it should arrive within 4 business \
+                days. Let us know if you need anything else!"""
+                .formatted(COVERED_SERIAL, REPLACEMENT_PART_CODE, REPLACEMENT_ORDER_ID))
+                .processed(true).build());
+        linkExchange(question, answer, toolExchange(session, answer, assistant));
     }
 
     /**
@@ -327,6 +370,52 @@ public class DemoConversationSeeder implements HasLogger {
             .outputTokenCount(80)
             .request("[{\"type\":\"USER\",\"text\":\"Write a short friendly out-of-office email.\"}]")
             .response("{\"type\":\"AI\",\"text\":\"Subject: Out of office ...\"}")
+            .build();
+    }
+
+    /**
+     * A tool-driven exchange: the model is offered both {@link ZephyrOneSupportTools} tools and
+     * calls each once before answering, so the Inspector shows what each call cost and returned.
+     */
+    private LlmExchangeDto toolExchange(SessionDto session, MessageDto answer, AssistantDto a) {
+        PromptDto prompt = a.getPrompt();
+        OfferedTool checkWarranty = new OfferedTool("checkWarrantyStatus", """
+            {"name":"checkWarrantyStatus","description":"Checks whether a Zephyr One unit, identified \
+            by its serial number, is still under warranty","parameters":{"type":"object","properties":\
+            {"serialNumber":{"type":"string"}},"required":["serialNumber"]}}""", 32);
+        OfferedTool createOrder = new OfferedTool("createReplacementOrder", """
+            {"name":"createReplacementOrder","description":"Places a replacement part order for a \
+            Zephyr One unit and returns the order id","parameters":{"type":"object","properties":\
+            {"serialNumber":{"type":"string"},"partCode":{"type":"string"}},\
+            "required":["serialNumber","partCode"]}}""", 38);
+
+        ToolCall warrantyCall = new ToolCall(1, "checkWarrantyStatus",
+            "{\"serialNumber\":\"" + COVERED_SERIAL + "\"}",
+            "{\"serialNumber\":\"" + COVERED_SERIAL + "\",\"covered\":true,\"expiresOn\":\"2027-03-14\"}",
+            false, 180L, 22, 14, false);
+        ToolCall orderCall = new ToolCall(2, "createReplacementOrder",
+            "{\"serialNumber\":\"" + COVERED_SERIAL + "\",\"partCode\":\"" + REPLACEMENT_PART_CODE + "\"}",
+            "{\"orderId\":\"" + REPLACEMENT_ORDER_ID + "\",\"partCode\":\"" + REPLACEMENT_PART_CODE
+                + "\",\"estimatedDeliveryDays\":4}",
+            false, 240L, 28, 18, false);
+
+        return baseExchange(session, answer, a)
+            .promptTokenCount(prompt != null ? 90 : 0)
+            .inputTokenCount(210)
+            .outputTokenCount(95)
+            .request("[{\"type\":\"USER\",\"text\":\"Is " + COVERED_SERIAL
+                + " under warranty, and can you send a replacement " + REPLACEMENT_PART_CODE + "?\"}]")
+            .response("{\"type\":\"AI\",\"text\":\"Serial " + COVERED_SERIAL
+                + " is covered; order " + REPLACEMENT_ORDER_ID + " placed for " + REPLACEMENT_PART_CODE
+                + ".\"}")
+            .offeredTools(List.of(checkWarranty, createOrder))
+            .toolCalls(List.of(warrantyCall, orderCall))
+            // Each definition travels on both model calls; each call's result travels on the one
+            // model call after it.
+            .toolInputTokenCount((checkWarranty.inputTokenCount() + createOrder.inputTokenCount()) * 2
+                + warrantyCall.inputTokenCount() + orderCall.inputTokenCount())
+            .toolOutputTokenCount(warrantyCall.outputTokenCount() + orderCall.outputTokenCount())
+            .modelCallCount(2)
             .build();
     }
 
