@@ -51,8 +51,8 @@ import org.springframework.stereotype.Component;
  * Seeds the demo data on first startup so the app is usable and compelling immediately. It creates a
  * small but complete catalog:
  * <ul>
- * <li>two <b>LLMs</b>: a working local Ollama model and a disabled <b>OpenAI</b> placeholder the
- * evaluator can complete with their own key;</li>
+ * <li>four <b>LLMs</b>: a working local Ollama model and disabled <b>OpenAI</b>, <b>Anthropic</b> and
+ * <b>Gemini</b> placeholders the evaluator can complete with their own key;</li>
  * <li>three <b>prompts</b> written in Markdown, each with a couple of revisions to showcase the
  * revision history;</li>
  * <li>two knowledge-base <b>categories</b>, each with its own fictional <b>document</b>;</li>
@@ -77,6 +77,16 @@ public class DemoDataInitializer implements HasLogger {
     // Disabled placeholder: the evaluator fills in the key and model to switch the demo to OpenAI.
     private static final String OPENAI_CONFIGURATION =
         "{\"key\":\"<YOUR_API_KEY>\",\"modelName\":\"<YOUR_OPENAI_MODEL>\",\"url\":\"https://api.openai.com/v1\"}";
+
+    private static final String ANTHROPIC_LLM_NAME = "Anthropic (add your key)";
+    // Disabled placeholder: the evaluator fills in the key and model to switch the demo to Anthropic.
+    private static final String ANTHROPIC_CONFIGURATION =
+        "{\"key\":\"<YOUR_API_KEY>\",\"modelName\":\"<YOUR_ANTHROPIC_MODEL>\",\"url\":\"https://api.anthropic.com/v1\"}";
+
+    private static final String GEMINI_LLM_NAME = "Gemini (add your key)";
+    // Disabled placeholder: the evaluator fills in the key and model to switch the demo to Gemini.
+    private static final String GEMINI_CONFIGURATION =
+        "{\"key\":\"<YOUR_API_KEY>\",\"modelName\":\"<YOUR_GEMINI_MODEL>\",\"url\":\"https://generativelanguage.googleapis.com/v1beta\"}";
 
     // Knowledge base ---------------------------------------------------------------------------
     private static final String CUSTOMER_CATEGORY_NAME = "Product Knowledge Base";
@@ -144,7 +154,9 @@ public class DemoDataInitializer implements HasLogger {
     @EventListener(ApplicationReadyEvent.class)
     public void initialize() {
         LlmDto llm = getOrCreateLlm();
-        getOrCreateOpenAiPlaceholder();
+        getOrCreatePlaceholder(OPENAI_LLM_NAME, LlmType.OPEN_AI, OPENAI_CONFIGURATION);
+        getOrCreatePlaceholder(ANTHROPIC_LLM_NAME, LlmType.ANTHROPIC, ANTHROPIC_CONFIGURATION);
+        getOrCreatePlaceholder(GEMINI_LLM_NAME, LlmType.GEMINI, GEMINI_CONFIGURATION);
 
         PromptDto generalPrompt = getOrCreatePrompt(GENERAL_PROMPT_NAME, GENERAL_PROMPT_V1,
             GENERAL_PROMPT_V2, "Added a note about admitting uncertainty");
@@ -193,22 +205,21 @@ public class DemoDataInitializer implements HasLogger {
             });
     }
 
-    /** Seeds a disabled OpenAI LLM so the evaluator can see how to switch the demo to OpenAI. */
-    private void getOrCreateOpenAiPlaceholder() {
-        boolean exists = llmService.findAll().stream()
-            .anyMatch(l -> OPENAI_LLM_NAME.equals(l.getName()));
+    /** Seeds a disabled LLM placeholder so the evaluator can see how to switch the demo to it. */
+    private void getOrCreatePlaceholder(String name, LlmType type, String configuration) {
+        boolean exists = llmService.findAll().stream().anyMatch(l -> name.equals(l.getName()));
         if (exists) {
             return;
         }
         LlmDto llm = LlmDto.builder()
-            .name(OPENAI_LLM_NAME)
+            .name(name)
             .enabled(false)
             .system(false)
-            .type(LlmType.OPEN_AI)
-            .configuration(OPENAI_CONFIGURATION)
+            .type(type)
+            .configuration(configuration)
             .build();
         llmService.save(llm);
-        logger().info("Created disabled OpenAI placeholder LLM.");
+        logger().info("Created disabled {} placeholder LLM.", type.getLabel());
     }
 
     /**

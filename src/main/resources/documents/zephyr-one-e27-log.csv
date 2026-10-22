@@ -1,0 +1,7 @@
+timestamp,event,code,detail
+2026-10-21T09:14:02Z,ERROR,E-27,Boundary wire signal lost
+2026-10-21T09:14:02Z,STATE,STOPPED,Mower halted mid-mow
+2026-10-21T09:14:05Z,SENSOR,WIRE_VOLTAGE,0.0V
+2026-10-21T08:52:10Z,ERROR,E-27,Boundary wire signal lost
+2026-10-21T08:52:11Z,STATE,STOPPED,Mower halted mid-mow
+2026-10-20T19:03:44Z,STATE,RESUMED,Mower resumed after manual restart
