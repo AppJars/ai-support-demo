@@ -280,7 +280,23 @@ page that already loaded another Vaadin version, such as Yavu on Vaadin 23, the 
 There the chat works inside an iframe. Serve the snippet above from a page of the site itself, so
 its requests carry the origin of the Web channel, and place an iframe fixed in a corner pointing to
 it. Resize the iframe when the chat opens: the chat dialog has the `opened` attribute while it is
-open. Inside an iframe the bubble cannot be dragged around the site, as it moves within the iframe.
+open. When the chat host restarts, the bubble replaces its element without reloading the iframe, so
+look it up again instead of keeping a reference to it.
+
+The iframe clips whatever is drawn outside its box, including the shadow of the chat window. Let
+the window fill the iframe and draw the shadow on the iframe instead:
+
+```css
+ai-support-chat {
+  --vaadin-overlay-viewport-inset: 0px;
+  --vaadin-dialog-shadow: none;
+  --vaadin-dialog-border-radius: 12px;
+}
+```
+
+Inside an iframe the bubble cannot be dragged around the site, as it moves within the iframe, and
+the chat window cannot be resized: the iframe is narrower than the mobile breakpoint (768 px), so
+the chat always opens in mobile mode, filling the iframe.
 
 ---
 
