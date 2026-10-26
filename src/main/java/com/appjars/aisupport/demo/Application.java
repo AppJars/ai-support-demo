@@ -32,6 +32,7 @@ import com.vaadin.flow.component.page.Push;
 import com.vaadin.flow.component.page.TargetElement;
 import com.vaadin.flow.server.AppShellSettings;
 import com.vaadin.flow.server.PWA;
+import com.vaadin.flow.spring.annotation.EnableVaadin;
 import com.vaadin.flow.theme.lumo.Lumo;
 import jakarta.annotation.PostConstruct;
 import org.springframework.boot.SpringApplication;
@@ -58,6 +59,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
   description = "A demonstration of the AI Support AppJar module in Vaadin 25."
 )
 @EnableScheduling
+// Also scans the exporter of the embedded chat, which lives outside this package
+@EnableVaadin({"com.appjars.aisupport.demo", "com.appjars.aisupport.flow.embed"})
 public class Application extends SpringBootServletInitializer implements AppShellConfigurator {
 
   final RouteConfigurer routeConfigurer;

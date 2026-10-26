@@ -59,6 +59,9 @@ public class SecurityConfiguration {
             // VaadinWebSecurity auto-permitted these in V24; VaadinSecurityConfigurer does not.
             .requestMatchers(HttpMethod.GET, "/icons/**")
             .permitAll()
+            // The embedded chat (<ai-support-chat>) loads its script from pages of other sites.
+            .requestMatchers("/web-component/**")
+            .permitAll()
             .requestMatchers(HttpMethod.GET, "/api/webhooks/**")
             .permitAll()
             .requestMatchers(HttpMethod.POST, "/api/webhooks/**")
