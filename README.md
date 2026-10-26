@@ -244,6 +244,46 @@ Every property is documented in the
 
 ---
 
+## Embedding the chat in another site
+
+The `embedded-chat` profile serves the chat bubble as the `<ai-support-chat>` web component, so a
+site running on the same machine can show it. It moves the demo to port `8081` and dedicates the
+`localhost` host to the chat. Run it in production mode, as an embedding site would use it:
+
+```bash
+mvn -Pproduction package -DskipTests
+AI_SUPPORT_VISITOR_KEY=<a secret of 32 characters or more> \
+  java -jar target/appjars-ai-support-demo-1.0.0-SNAPSHOT.jar --spring.profiles.active=embedded-chat
+```
+
+1. Administer the demo from `http://127.0.0.1:8081`: on `localhost:8081` it answers `404` to
+   everything except the web component.
+2. Configure an LLM and an assistant, then create an enabled **Web** channel in **Channels** whose
+   **Site address** is the exact origin of the site, such as `http://localhost:8080`.
+3. Check that `http://localhost:8081/web-component/ai-support-chat.js` returns JavaScript.
+
+On the site, add the element and load its script with a `<script>` tag. The script finds its own
+tag to resolve the address of the chat host, so `import()` does not work:
+
+```html
+<ai-support-chat language="es"></ai-support-chat>
+<script type="module" src="http://localhost:8081/web-component/ai-support-chat.js"></script>
+```
+
+### Sites built with another Vaadin version
+
+The chat brings its own Vaadin 25 bundle, and a page holds one registry of custom elements. On a
+page that already loaded another Vaadin version, such as Yavu on Vaadin 23, the chat fails: its
+`vaadin-*` elements are already defined, and the bundle stops at
+`vaadin-grid-flow-selection-column has already been used with this registry`.
+
+There the chat works inside an iframe. Serve the snippet above from a page of the site itself, so
+its requests carry the origin of the Web channel, and place an iframe fixed in a corner pointing to
+it. Resize the iframe when the chat opens: the chat dialog has the `opened` attribute while it is
+open. Inside an iframe the bubble cannot be dragged around the site, as it moves within the iframe.
+
+---
+
 ## Stopping the infrastructure
 
 ```bash
