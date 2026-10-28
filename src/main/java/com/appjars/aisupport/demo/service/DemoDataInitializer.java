@@ -30,8 +30,10 @@ import com.appjars.aisupport.model.CategoryDto;
 import com.appjars.aisupport.model.DocumentDto;
 import com.appjars.aisupport.model.LlmDto;
 import com.appjars.aisupport.model.PromptDto;
+import com.appjars.aisupport.model.ToolAssignmentDto;
 import com.appjars.aisupport.model.filters.AssistantFilter;
 import com.appjars.aisupport.model.filters.DocumentFilter;
+import com.appjars.aisupport.demo.tools.ZephyrOneSupportTools;
 import com.appjars.service.HasLogger;
 
 import java.io.File;
@@ -51,18 +53,18 @@ import org.springframework.stereotype.Component;
  * Seeds the demo data on first startup so the app is usable and compelling immediately. It creates a
  * small but complete catalog:
  * <ul>
- * <li>two <b>LLMs</b>: a working local Ollama model and a disabled <b>OpenAI</b> placeholder the
- * evaluator can complete with their own key;</li>
+ * <li>four <b>LLMs</b>: a working local Ollama model and disabled <b>OpenAI</b>, <b>Anthropic</b> and
+ * <b>Gemini</b> placeholders the evaluator can complete with their own key;</li>
  * <li>three <b>prompts</b> written in Markdown, each with a couple of revisions to showcase the
  * revision history;</li>
  * <li>two knowledge-base <b>categories</b>, each with its own fictional <b>document</b>;</li>
  * <li>three <b>assistants</b>: a General Assistant (plain chat) and two document-grounded support
  * assistants — one customer-facing, one internal — bound to different categories so their
- * answers differ.</li>
+ * answers differ; the customer-facing one is also assigned {@link ZephyrOneSupportTools}, so it
+ * can check warranty status and place replacement part orders.</li>
  * </ul>
- * Once the catalog exists, {@link DemoConversationSeeder} adds a couple of pre-built conversations
- * and a matching LLM Inspector exchange. Every entity is created only if missing, so restarts are
- * safe. No LLM is ever called to produce the data (only the documents are embedded at startup).
+ * Once the catalog exists, {@link DemoConversationSeeder} adds missing conversations and Inspector
+ * exchanges. Seeding calls no LLM; documents use the local embedding model.
  */
 @Component
 @RequiredArgsConstructor
@@ -77,6 +79,16 @@ public class DemoDataInitializer implements HasLogger {
     // Disabled placeholder: the evaluator fills in the key and model to switch the demo to OpenAI.
     private static final String OPENAI_CONFIGURATION =
         "{\"key\":\"<YOUR_API_KEY>\",\"modelName\":\"<YOUR_OPENAI_MODEL>\",\"url\":\"https://api.openai.com/v1\"}";
+
+    private static final String ANTHROPIC_LLM_NAME = "Anthropic (add your key)";
+    // Disabled placeholder: the evaluator fills in the key and model to switch the demo to Anthropic.
+    private static final String ANTHROPIC_CONFIGURATION =
+        "{\"key\":\"<YOUR_API_KEY>\",\"modelName\":\"<YOUR_ANTHROPIC_MODEL>\",\"url\":\"https://api.anthropic.com/v1\"}";
+
+    private static final String GEMINI_LLM_NAME = "Gemini (add your key)";
+    // Disabled placeholder: the evaluator fills in the key and model to switch the demo to Gemini.
+    private static final String GEMINI_CONFIGURATION =
+        "{\"key\":\"<YOUR_API_KEY>\",\"modelName\":\"<YOUR_GEMINI_MODEL>\",\"url\":\"https://generativelanguage.googleapis.com/v1beta\"}";
 
     // Knowledge base ---------------------------------------------------------------------------
     private static final String CUSTOMER_CATEGORY_NAME = "Product Knowledge Base";
@@ -134,6 +146,11 @@ public class DemoDataInitializer implements HasLogger {
     private static final String CUSTOMER_ASSISTANT_NAME = "Support Assistant";
     private static final String INTERNAL_ASSISTANT_NAME = "Support Assistant (Internal)";
 
+    // Tools ----------------------------------------------------------------------------------------
+    // Spring bean name (default: decapitalized class name) of ZephyrOneSupportTools, assigned to the
+    // customer Support Assistant so it can check warranty status and place replacement part orders.
+    private static final String ZEPHYR_ONE_TOOLS_BEAN_NAME = "zephyrOneSupportTools";
+
     private final DocumentService documentService;
     private final CategoryService categoryService;
     private final LlmService llmService;
@@ -144,7 +161,9 @@ public class DemoDataInitializer implements HasLogger {
     @EventListener(ApplicationReadyEvent.class)
     public void initialize() {
         LlmDto llm = getOrCreateLlm();
-        getOrCreateOpenAiPlaceholder();
+        getOrCreatePlaceholder(OPENAI_LLM_NAME, LlmType.OPEN_AI, OPENAI_CONFIGURATION);
+        getOrCreatePlaceholder(ANTHROPIC_LLM_NAME, LlmType.ANTHROPIC, ANTHROPIC_CONFIGURATION);
+        getOrCreatePlaceholder(GEMINI_LLM_NAME, LlmType.GEMINI, GEMINI_CONFIGURATION);
 
         PromptDto generalPrompt = getOrCreatePrompt(GENERAL_PROMPT_NAME, GENERAL_PROMPT_V1,
             GENERAL_PROMPT_V2, "Added a note about admitting uncertainty");
@@ -165,13 +184,11 @@ public class DemoDataInitializer implements HasLogger {
         AssistantDto general =
             getOrCreateAssistant(GENERAL_ASSISTANT_NAME, true, llm, generalPrompt, List.of());
         AssistantDto customerSupport = getOrCreateAssistant(CUSTOMER_ASSISTANT_NAME, false, llm,
-            customerPrompt, List.of(customerCategory));
+            customerPrompt, List.of(customerCategory),
+            List.of(ToolAssignmentDto.ofBean(ZEPHYR_ONE_TOOLS_BEAN_NAME)));
         getOrCreateAssistant(INTERNAL_ASSISTANT_NAME, false, llm, internalPrompt,
             List.of(internalCategory));
 
-        // Pre-build a couple of conversations (and a matching inspector exchange) once the catalog is
-        // ready. The customer support assistant grounds the RAG showcase; the general assistant backs
-        // the second, non-RAG conversation.
         conversationSeeder.seed(general, customerSupport);
     }
 
@@ -193,22 +210,21 @@ public class DemoDataInitializer implements HasLogger {
             });
     }
 
-    /** Seeds a disabled OpenAI LLM so the evaluator can see how to switch the demo to OpenAI. */
-    private void getOrCreateOpenAiPlaceholder() {
-        boolean exists = llmService.findAll().stream()
-            .anyMatch(l -> OPENAI_LLM_NAME.equals(l.getName()));
+    /** Seeds a disabled LLM placeholder so the evaluator can see how to switch the demo to it. */
+    private void getOrCreatePlaceholder(String name, LlmType type, String configuration) {
+        boolean exists = llmService.findAll().stream().anyMatch(l -> name.equals(l.getName()));
         if (exists) {
             return;
         }
         LlmDto llm = LlmDto.builder()
-            .name(OPENAI_LLM_NAME)
+            .name(name)
             .enabled(false)
             .system(false)
-            .type(LlmType.OPEN_AI)
-            .configuration(OPENAI_CONFIGURATION)
+            .type(type)
+            .configuration(configuration)
             .build();
         llmService.save(llm);
-        logger().info("Created disabled OpenAI placeholder LLM.");
+        logger().info("Created disabled {} placeholder LLM.", type.getLabel());
     }
 
     /**
@@ -250,21 +266,37 @@ public class DemoDataInitializer implements HasLogger {
 
     private AssistantDto getOrCreateAssistant(String name, boolean defaultAssistant, LlmDto llm,
         PromptDto prompt, List<CategoryDto> categories) {
-        return assistantService.findByFilter(AssistantFilter.builder().name(name).build())
-            .stream().findFirst()
-            .orElseGet(() -> {
-                AssistantDto assistant = AssistantDto.builder()
-                    .name(name)
-                    .enabled(true)
-                    .defaultAssistant(defaultAssistant)
-                    .llm(llm)
-                    .prompt(prompt)
-                    .categories(new ArrayList<>(categories))
-                    .build();
-                assistant.setId(assistantService.save(assistant));
-                logger().info("Created assistant '{}'.", name);
-                return assistant;
-            });
+        return getOrCreateAssistant(name, defaultAssistant, llm, prompt, categories, List.of());
+    }
+
+    private AssistantDto getOrCreateAssistant(String name, boolean defaultAssistant, LlmDto llm,
+        PromptDto prompt, List<CategoryDto> categories, List<ToolAssignmentDto> toolAssignments) {
+        AssistantDto existing = assistantService.findByFilter(AssistantFilter.builder().name(name).build())
+            .stream().findFirst().orElse(null);
+        if (existing != null) {
+            List<ToolAssignmentDto> assignments = new ArrayList<>(
+                existing.getToolAssignments() == null ? List.of() : existing.getToolAssignments());
+            List<ToolAssignmentDto> missing = toolAssignments.stream()
+                .filter(t -> !assignments.contains(t)).toList();
+            if (!missing.isEmpty()) {
+                assignments.addAll(missing);
+                existing.setToolAssignments(assignments);
+                assistantService.save(existing);
+            }
+            return existing;
+        }
+        AssistantDto assistant = AssistantDto.builder()
+            .name(name)
+            .enabled(true)
+            .defaultAssistant(defaultAssistant)
+            .llm(llm)
+            .prompt(prompt)
+            .categories(new ArrayList<>(categories))
+            .toolAssignments(new ArrayList<>(toolAssignments))
+            .build();
+        assistant.setId(assistantService.save(assistant));
+        logger().info("Created assistant '{}'.", name);
+        return assistant;
     }
 
     private DocumentDto getOrCreateDocument(String name, String resource, CategoryDto category) {
