@@ -37,6 +37,8 @@ import com.appjars.aisupport.model.ParticipantDto;
 import com.appjars.aisupport.model.PromptDto;
 import com.appjars.aisupport.model.SenderType;
 import com.appjars.aisupport.model.SessionDto;
+import com.appjars.aisupport.model.filters.MessageFilter;
+import com.appjars.aisupport.model.filters.SessionFilter;
 import com.appjars.aisupport.model.util.EmbeddingChunk;
 import com.appjars.aisupport.model.util.OfferedTool;
 import com.appjars.aisupport.model.util.ToolCall;
@@ -51,15 +53,17 @@ import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Seeds a couple of pre-built conversations so the demo is not empty on first run and so the chat
- * visibility model and the LLM Inspector have something to show. Nothing here calls an LLM — every
- * message and exchange is hardcoded.
+ * Seeds three conversations to demonstrate chat visibility and the LLM Inspector without calling
+ * an LLM. Every message and exchange is fixed.
  *
  * <ul>
  * <li><b>Support conversation</b> — customer <b>Leo</b> asks the customer Support Assistant about
@@ -70,10 +74,11 @@ import org.springframework.stereotype.Component;
  * chunk, so the Inspector shows RAG was used.</li>
  * <li><b>General conversation</b> — customer <b>Sophia</b> chats with the General Assistant (no
  * documents), backed by a non-RAG exchange for contrast in the Inspector.</li>
+ * <li><b>Tool conversation</b> — Sophia checks a warranty and orders a replacement part through
+ * the Support Assistant, with both fictional tool calls recorded in the Inspector.</li>
  * </ul>
  *
- * Result: admins see both conversations (and the admin-only note); Leo sees only the support chat
- * (without the note); Sophia sees only the general chat.
+ * Admins see all three conversations and the internal note; each customer sees only their own chats.
  */
 @Component
 @RequiredArgsConstructor
@@ -82,7 +87,13 @@ public class DemoConversationSeeder implements HasLogger {
     private static final String CUSTOMER = "Leo";
     private static final String ADMIN = "Olivia";
     private static final String GENERAL_CUSTOMER = "Sophia";
-    private static final String TOOL_CUSTOMER = "Maya";
+    private static final String TOOL_CUSTOMER = GENERAL_CUSTOMER;
+    private static final String SUPPORT_SESSION_KEY = "ai-support-demo:support";
+    private static final String GENERAL_SESSION_KEY = "ai-support-demo:general";
+    private static final String TOOL_SESSION_KEY = "ai-support-demo:tools";
+    private static final String SUPPORT_SUMMARY = "Zephyr One error E-27 — mower stopped mid-mow";
+    private static final String GENERAL_SUMMARY = "Drafting a friendly out-of-office email";
+    private static final String TOOL_SUMMARY = "Warranty check and replacement blade kit for ZO-88421-07";
 
     // Showcases tool calling: the Support Assistant resolves the request on its own, via
     // ZephyrOneSupportTools, with no human admin involved.
@@ -94,7 +105,7 @@ public class DemoConversationSeeder implements HasLogger {
     private static final String DIAGNOSTICS_LOG_RESOURCE = "documents/zephyr-one-e27-log.csv";
     private static final String DIAGNOSTICS_LOG_NAME = "zephyr-one-e27-log.csv";
 
-    // Showcases voice notes and audio transcription (2.2.0): a short recorded clip with its transcript.
+    // The sample clip is synthesized locally; its stored transcript needs no speech-to-text call.
     private static final String VOICE_NOTE_RESOURCE = "attachments/leo-voice-note.wav";
     private static final String VOICE_NOTE_NAME = "voice-note.wav";
     private static final String VOICE_NOTE_TRANSCRIPT =
@@ -106,11 +117,9 @@ public class DemoConversationSeeder implements HasLogger {
     private final LlmExchangeService llmExchangeService;
     private final MessageAttachmentService attachmentService;
 
-    /** Seeds the demo conversations once, only if no session exists yet (so restarts are safe). */
+    /** Adds missing showcases atomically, including when upgrading an existing demo database. */
+    @Transactional
     public void seed(AssistantDto generalAssistant, AssistantDto customerSupportAssistant) {
-        if (!sessionService.findAll().isEmpty()) {
-            return;
-        }
         seedSupportConversation(customerSupportAssistant);
         seedGeneralConversation(generalAssistant);
         seedToolConversation(customerSupportAssistant);
@@ -120,8 +129,12 @@ public class DemoConversationSeeder implements HasLogger {
     private void seedSupportConversation(AssistantDto assistant) {
         Instant start = Instant.now().minus(Duration.ofHours(2)).truncatedTo(ChronoUnit.MILLIS);
 
-        SessionDto session = createSession(CUSTOMER, "Zephyr One error E-27 — mower stopped mid-mow",
-            assistant);
+        Optional<SessionDto> existing = findSession(SUPPORT_SESSION_KEY, CUSTOMER, SUPPORT_SUMMARY);
+        if (existing.isPresent()) {
+            seedSupportAttachments(existing.get(), start);
+            return;
+        }
+        SessionDto session = createSession(SUPPORT_SESSION_KEY, CUSTOMER, SUPPORT_SUMMARY, assistant);
         participantService.saveAll(List.of(
             participant(session, CUSTOMER, false, false, start.minusSeconds(60)),
             participant(session, ADMIN, false, true, start.minusSeconds(60)),
@@ -149,13 +162,7 @@ public class DemoConversationSeeder implements HasLogger {
                 a tracking link by email shortly.""")
                 .build());
 
-        attachCsvLog(save(message(session, CUSTOMER, SenderType.USER, start.plusSeconds(360),
-            "Here's the export from the mower's diagnostics panel, in case it helps.")
-                .processed(true).build()));
-
-        attachVoiceNote(save(message(session, CUSTOMER, SenderType.USER, start.plusSeconds(420),
-            "(voice note)")
-                .processed(true).build()));
+        seedSupportAttachments(session, start);
 
         // Admin-only internal note: visible to admins, hidden from Leo. Mirrors the internal playbook.
         save(message(session, ADMIN, SenderType.ADMINISTRATOR, start.plusSeconds(360),
@@ -164,9 +171,12 @@ public class DemoConversationSeeder implements HasLogger {
     }
 
     private void seedGeneralConversation(AssistantDto assistant) {
+        if (findSession(GENERAL_SESSION_KEY, GENERAL_CUSTOMER, GENERAL_SUMMARY).isPresent()) {
+            return;
+        }
         Instant start = Instant.now().minus(Duration.ofHours(1)).truncatedTo(ChronoUnit.MILLIS);
 
-        SessionDto session = createSession(GENERAL_CUSTOMER, "Drafting a friendly out-of-office email",
+        SessionDto session = createSession(GENERAL_SESSION_KEY, GENERAL_CUSTOMER, GENERAL_SUMMARY,
             assistant);
         participantService.saveAll(List.of(
             participant(session, GENERAL_CUSTOMER, false, false, start.minusSeconds(60)),
@@ -198,10 +208,12 @@ public class DemoConversationSeeder implements HasLogger {
      * made, so the Inspector shows tool usage distinct from the RAG and plain exchanges above.
      */
     private void seedToolConversation(AssistantDto assistant) {
+        if (findSession(TOOL_SESSION_KEY, TOOL_CUSTOMER, TOOL_SUMMARY).isPresent()) {
+            return;
+        }
         Instant start = Instant.now().minus(Duration.ofMinutes(30)).truncatedTo(ChronoUnit.MILLIS);
 
-        SessionDto session = createSession(TOOL_CUSTOMER,
-            "Warranty check and replacement blade kit for " + COVERED_SERIAL, assistant);
+        SessionDto session = createSession(TOOL_SESSION_KEY, TOOL_CUSTOMER, TOOL_SUMMARY, assistant);
         participantService.saveAll(List.of(
             participant(session, TOOL_CUSTOMER, false, false, start.minusSeconds(60)),
             participant(session, assistant.getName(), true, true, start.minusSeconds(60))));
@@ -238,8 +250,26 @@ public class DemoConversationSeeder implements HasLogger {
 
     // --- builders --------------------------------------------------------------------------------
 
-    private SessionDto createSession(String owner, String summary, AssistantDto assistant) {
+    private Optional<SessionDto> findSession(String key, String owner, String summary) {
+        Optional<SessionDto> session = sessionService.findByFilter(
+            SessionFilter.builder().externalId(key).build()).stream().findFirst();
+        if (session.isPresent()) {
+            return session;
+        }
+        // Adopt the original demo's sessions once; stable keys survive later summary edits.
+        return sessionService.findByFilter(SessionFilter.builder().userId(owner)
+                .sessionType(SessionType.MANUAL).summaryLikeCaseInsensitive(summary).build())
+            .stream().filter(s -> summary.equals(s.getSummary()) && s.getExternalId() == null)
+            .findFirst().map(s -> {
+                s.setExternalId(key);
+                sessionService.save(s);
+                return s;
+            });
+    }
+
+    private SessionDto createSession(String key, String owner, String summary, AssistantDto assistant) {
         SessionDto session = SessionDto.builder()
+            .externalId(key)
             .userId(owner)
             .summary(summary)
             .type(SessionType.MANUAL)
@@ -285,6 +315,23 @@ public class DemoConversationSeeder implements HasLogger {
     private MessageDto save(MessageDto message) {
         message.setId(messageService.save(message));
         return message;
+    }
+
+    private void seedSupportAttachments(SessionDto session, Instant start) {
+        Set<String> filenames = messageService.findByFilter(MessageFilter.builder()
+                .sessionFilter(SessionFilter.builder().id(session.getId()).build()).build())
+            .stream().filter(m -> m.getAttachments() != null)
+            .flatMap(m -> m.getAttachments().stream()).map(MessageAttachmentDto::getFilename)
+            .collect(Collectors.toSet());
+        if (!filenames.contains(DIAGNOSTICS_LOG_NAME)) {
+            attachCsvLog(save(message(session, CUSTOMER, SenderType.USER, start.plusSeconds(360),
+                "Here's the export from the mower's diagnostics panel, in case it helps.")
+                    .processed(true).build()));
+        }
+        if (!filenames.contains(VOICE_NOTE_NAME)) {
+            attachVoiceNote(save(message(session, CUSTOMER, SenderType.USER, start.plusSeconds(420),
+                "(voice note)").processed(true).build()));
+        }
     }
 
     /** Attaches the CSV diagnostics log to a message, read as plain text straight from the classpath. */

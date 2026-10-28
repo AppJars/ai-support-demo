@@ -14,17 +14,17 @@ Visit the official [AppJars documentation](https://docs.appjars.com) for more in
 
 ## What you get out of the box
 
-When the application starts for the first time, a `DemoDataInitializer` creates all the demo data
-automatically (and skips anything that already exists on later restarts):
+`DemoDataInitializer` creates missing demo data at startup. Restarts also add new showcases to an existing demo database without duplicating its conversations or attachments:
 
 | Entity | Value | Purpose |
 |--------|-------|---------|
-| **LLMs** | `llama3.2:3b` (Ollama) + a **disabled OpenAI placeholder** | The working local model, plus a ready-to-fill OpenAI entry |
+| **LLMs** | `llama3.2:3b` (Ollama) + **disabled OpenAI, Anthropic and Gemini placeholders** | The working local model, plus optional providers to configure with your own key |
 | **Prompts** | `General Prompt`, `Support Prompt — Customer`, `Support Prompt — Internal` | Markdown system prompts, each seeded with **revision history** |
 | **Categories** | `Product Knowledge Base`, `Internal Support Playbook` | Two separate knowledge bases |
 | **Documents** | `Zephyr One Support Guide`, `Zephyr One Internal Playbook` | Fictional docs embedded as vectors for RAG |
 | **Assistants** | `General Assistant` *(default)*, `Support Assistant`, `Support Assistant (Internal)` | Plain chat + two document-grounded assistants |
-| **Conversations** | A customer support chat + a general chat | Pre-built so the chat and LLM Inspector are populated on first run |
+| **Conversations** | Customer support with CSV/audio attachments, general chat, and a warranty/parts request | Fixed messages and Inspector exchanges demonstrating RAG, plain chat and tools |
+| **Tools** | `checkWarrantyStatus`, `createReplacementOrder` | Fictional operations assigned to the customer Support Assistant; no external system is called |
 
 ### Assistants and knowledge bases: seeing RAG clearly
 
@@ -43,16 +43,15 @@ The knowledge bases live at `src/main/resources/documents/zephyr-one-support.md`
 
 ### Pre-seeded conversations
 
-So the app is not empty on first run, two conversations are seeded (no LLM is called to produce them —
-the messages are fixed):
+Three conversations are seeded from fixed messages and exchanges. Seeding calls no LLM or speech-to-text service; the knowledge-base documents use the bundled local embedding model.
 
-- A **support chat**: *Leo* (customer) asks the Support Assistant about error E-27, the assistant
-  answers from the guide, and *Olivia* (admin) steps in — including one **admin-only** internal note.
+- A **support chat**: *Leo* (customer) asks the Support Assistant about error E-27, the assistant answers from the guide, and *Olivia* (admin) steps in, including one **admin-only** internal note. Leo also attaches a CSV diagnostics log and a playable sample voice note with its transcript already stored.
 - A **general chat**: *Sophia* (customer) chats with the General Assistant.
+- A **tool chat**: Sophia asks the Support Assistant to check serial `ZO-88421-07` and order blade kit `BK-14`. The Inspector records both offered tool definitions and their calls, results, timings and token counts. The sample tools return fictional data and create no real orders.
 
-This shows the visibility model (admins see every conversation and the admin-only note; each customer
-sees only their own), and it populates the **LLM Inspector** — open the support conversation there to
-see the retrieved document chunk that grounded the answer.
+This shows the visibility model (admins see every conversation and the admin-only note; each customer sees only their own), and it populates the **LLM Inspector**. Open the support conversation to inspect its retrieved document chunk, or the warranty conversation to inspect tool usage.
+
+The audio fixture was synthesized locally from its stored transcript. Stable demo identifiers prevent duplicates if a seeded conversation's summary later changes.
 
 ---
 
@@ -168,8 +167,7 @@ switch between the two assistants:
 
 - With the **General Assistant**, ask anything — it behaves like a normal chatbot.
 
-You can also attach files to a message (up to 3 per message, 10 MB each). Images, audio, video and
-PDFs are passed to the model when it is multimodal.
+You can also attach files to a message (up to 3 per message, 10 MB each). Images, audio, video and PDFs require a model that accepts those formats. The default `llama3.2:3b` reads text attachments, and the seeded voice note includes a stored transcript so it can be understood without a speech-to-text provider.
 
 ### The admin panel
 

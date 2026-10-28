@@ -63,9 +63,8 @@ import org.springframework.stereotype.Component;
  * answers differ; the customer-facing one is also assigned {@link ZephyrOneSupportTools}, so it
  * can check warranty status and place replacement part orders.</li>
  * </ul>
- * Once the catalog exists, {@link DemoConversationSeeder} adds a couple of pre-built conversations
- * and a matching LLM Inspector exchange. Every entity is created only if missing, so restarts are
- * safe. No LLM is ever called to produce the data (only the documents are embedded at startup).
+ * Once the catalog exists, {@link DemoConversationSeeder} adds missing conversations and Inspector
+ * exchanges. Seeding calls no LLM; documents use the local embedding model.
  */
 @Component
 @RequiredArgsConstructor
@@ -190,9 +189,6 @@ public class DemoDataInitializer implements HasLogger {
         getOrCreateAssistant(INTERNAL_ASSISTANT_NAME, false, llm, internalPrompt,
             List.of(internalCategory));
 
-        // Pre-build a couple of conversations (and a matching inspector exchange) once the catalog is
-        // ready. The customer support assistant grounds the RAG showcase; the general assistant backs
-        // the second, non-RAG conversation.
         conversationSeeder.seed(general, customerSupport);
     }
 
@@ -275,22 +271,32 @@ public class DemoDataInitializer implements HasLogger {
 
     private AssistantDto getOrCreateAssistant(String name, boolean defaultAssistant, LlmDto llm,
         PromptDto prompt, List<CategoryDto> categories, List<ToolAssignmentDto> toolAssignments) {
-        return assistantService.findByFilter(AssistantFilter.builder().name(name).build())
-            .stream().findFirst()
-            .orElseGet(() -> {
-                AssistantDto assistant = AssistantDto.builder()
-                    .name(name)
-                    .enabled(true)
-                    .defaultAssistant(defaultAssistant)
-                    .llm(llm)
-                    .prompt(prompt)
-                    .categories(new ArrayList<>(categories))
-                    .toolAssignments(new ArrayList<>(toolAssignments))
-                    .build();
-                assistant.setId(assistantService.save(assistant));
-                logger().info("Created assistant '{}'.", name);
-                return assistant;
-            });
+        AssistantDto existing = assistantService.findByFilter(AssistantFilter.builder().name(name).build())
+            .stream().findFirst().orElse(null);
+        if (existing != null) {
+            List<ToolAssignmentDto> assignments = new ArrayList<>(
+                existing.getToolAssignments() == null ? List.of() : existing.getToolAssignments());
+            List<ToolAssignmentDto> missing = toolAssignments.stream()
+                .filter(t -> !assignments.contains(t)).toList();
+            if (!missing.isEmpty()) {
+                assignments.addAll(missing);
+                existing.setToolAssignments(assignments);
+                assistantService.save(existing);
+            }
+            return existing;
+        }
+        AssistantDto assistant = AssistantDto.builder()
+            .name(name)
+            .enabled(true)
+            .defaultAssistant(defaultAssistant)
+            .llm(llm)
+            .prompt(prompt)
+            .categories(new ArrayList<>(categories))
+            .toolAssignments(new ArrayList<>(toolAssignments))
+            .build();
+        assistant.setId(assistantService.save(assistant));
+        logger().info("Created assistant '{}'.", name);
+        return assistant;
     }
 
     private DocumentDto getOrCreateDocument(String name, String resource, CategoryDto category) {
