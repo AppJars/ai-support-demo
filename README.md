@@ -8,7 +8,9 @@ API key.
 The demo opens on a public landing page that explains the features and offers **guided tours** of
 each view, and it signs you in with a single click — no credentials to type.
 
-Visit the official [AppJars documentation](https://docs.appjars.com) for more information.
+Visit the official [AppJars documentation](https://docs.appjars.com) for more information. Features,
+technical requirements and pricing are on the
+[AI Support page of the AppJars catalog](https://www.appjars.com/catalog/ai-support/).
 
 ---
 
